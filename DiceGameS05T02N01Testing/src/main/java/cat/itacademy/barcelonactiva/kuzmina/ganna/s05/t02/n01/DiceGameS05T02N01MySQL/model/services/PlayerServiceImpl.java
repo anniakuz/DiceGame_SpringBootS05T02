@@ -2,25 +2,30 @@ package cat.itacademy.barcelonactiva.kuzmina.ganna.s05.t02.n01.DiceGameS05T02N01
 
 
 import cat.itacademy.barcelonactiva.kuzmina.ganna.s05.t02.n01.DiceGameS05T02N01MySQL.exceptions.HttpException;
-import cat.itacademy.barcelonactiva.kuzmina.ganna.s05.t02.n01.DiceGameS05T02N01MySQL.model.domain.Game;
 import cat.itacademy.barcelonactiva.kuzmina.ganna.s05.t02.n01.DiceGameS05T02N01MySQL.model.domain.Player;
+import cat.itacademy.barcelonactiva.kuzmina.ganna.s05.t02.n01.DiceGameS05T02N01MySQL.model.domain.Role;
 import cat.itacademy.barcelonactiva.kuzmina.ganna.s05.t02.n01.DiceGameS05T02N01MySQL.model.repository.PlayerRepository;
+import cat.itacademy.barcelonactiva.kuzmina.ganna.s05.t02.n01.DiceGameS05T02N01MySQL.security.JwtService;
 import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
-import java.util.*;
+import java.time.LocalDate;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
-@Service
+@org.springframework.stereotype.Service
 @AllArgsConstructor
 public class PlayerServiceImpl implements PlayerService {
 
+    private final JwtService jwtService;
+    private final PasswordEncoder passwordEncoder;
     private final PlayerRepository playerRepository;
-
-
     @Override
-    public Player findPlayerById(String playerId) {
+    public Player findPlayerById(Integer playerId) {
         if(playerRepository.findAll().isEmpty()){
             throw new HttpException(HttpStatus.INSUFFICIENT_STORAGE,"There is no one");
         }
@@ -31,47 +36,53 @@ public class PlayerServiceImpl implements PlayerService {
 
     @Override
     public Player createPlayer(Player player) {
-        if(playerRepository.getPlayerByName(player.getName())!=null){
-            throw new HttpException(HttpStatus.BAD_REQUEST,"Player with this name already exist");
-        }
         Player playerForSave = new Player(player.getName());
+        playerForSave.setPassword(passwordEncoder.encode(player.getPassword()));
+        playerForSave.setRole(Role.USER);
+        playerForSave.setRegisterDate(LocalDate.now());
         return playerRepository.save(playerForSave);
     }
 
     @Override
-    public void savePlayer(Player player){
-        playerRepository.save(player);
+    public List<Player> getAllPlayers(){
+        List<Player>players = playerRepository.findAll();
+        if(players.isEmpty()){
+            throw new HttpException(HttpStatus.INSUFFICIENT_STORAGE,"There is no registered player");
+        }
+        players.forEach(Player::calculateRate);
+        return players;
+
     }
+    /*
     @Override
     public List<Player> getAllPlayers(){
         if(playerRepository.findAll().isEmpty()){
             throw new HttpException(HttpStatus.INSUFFICIENT_STORAGE,"There is no registered player");
         }
         List<Player> allPlayers = playerRepository.findAll();
-        System.out.println(allPlayers.get(3).getGames());
-        allPlayers.forEach(System.out::println);
         allPlayers.forEach(Player::calculateRate);
-        return allPlayers;//playerRepository.findAll();
+        return playerRepository.findAll();
 
-    }
+    }*/
 
     @Override
     public Map<String, Double> getAllPlayersRates(){
-        if(playerRepository.findAll().isEmpty()){
+        List<Player> allPlayers = playerRepository.findAll();
+        if(allPlayers.isEmpty()){
             throw new HttpException(HttpStatus.INSUFFICIENT_STORAGE,"There is no registered player");
         }
-        List<Player> allPlayers = playerRepository.findAll();
         allPlayers.forEach(Player::calculateRate);
         Map<String, Double> allPlayersRates = allPlayers.stream().
-                collect(Collectors.toMap(Player::getName, Player::calculateRate));
+                collect(Collectors.toMap(Player::getName, Player::getRate));
         System.out.println(allPlayersRates);
         return allPlayersRates;
 
     }
 
     @Override
-    public Player editPlayer(String playerId, Player player) {
-        if(playerRepository.findAll().isEmpty()){
+    public Player editPlayer(Integer playerId, Player player) {
+        List<Player> players = playerRepository.findAll();
+        if(players.isEmpty()){
             throw new HttpException(HttpStatus.INSUFFICIENT_STORAGE,"There is no registered player");
         }
         playerRepository.findById(playerId).orElseThrow(()-> new HttpException(HttpStatus.NOT_FOUND,
@@ -85,22 +96,22 @@ public class PlayerServiceImpl implements PlayerService {
 
     }
 
-    @Override
-    public void deleteAllGames(String playerId) {
+    /*@Override
+    public void deleteAllGames(Integer playerId) {
         if(playerRepository.findAll().isEmpty()){
             throw new HttpException(HttpStatus.INSUFFICIENT_STORAGE,"There is no registered player");
         }
-        Player player = playerRepository.findById(playerId).orElseThrow(()-> new HttpException(HttpStatus.NOT_FOUND,
-                "Could not find any player with ID "+playerId));
-        List.copyOf(player.getGames()).forEach(player.getGames()::remove);
-    }
+            Player player = playerRepository.findById(playerId).orElseThrow(()-> new HttpException(HttpStatus.NOT_FOUND,
+                    "Could not find any player with ID "+playerId));
+        List.copyOf(player.getGames()).stream().forEach(player.getGames()::remove);
+    }*/
 
     @Override
     public Double getRateForAll(){
         if(playerRepository.findAll().isEmpty()){
             throw new HttpException(HttpStatus.INSUFFICIENT_STORAGE,"TThere is no registered player");
         }
-        Double rate = getAllPlayers().stream().mapToDouble(Player::calculateRate).sum()/getAllPlayers().size();
+        Double rate = getAllPlayers().stream().mapToDouble(Player::getRate).sum()/getAllPlayers().size();
         return rate;
     }
 
@@ -110,10 +121,10 @@ public class PlayerServiceImpl implements PlayerService {
         if(playerRepository.findAll().isEmpty()){
             throw new HttpException(HttpStatus.INSUFFICIENT_STORAGE,"There is no registered player");
         }
-        Comparator<Player> comparator = Comparator.comparing(Player::calculateRate);
+        Comparator<Player> comparator = Comparator.comparing(Player::getRate);
         Player playerMin = getAllPlayers().stream().min(comparator).get();
         listPlayersMin = playerRepository.findAll().stream().
-                filter(player -> Objects.equals(player.calculateRate(), playerMin.calculateRate())).collect(Collectors.toList());
+                filter(player -> Objects.equals(player.getRate(), playerMin.getRate())).collect(Collectors.toList());
         return listPlayersMin;
     }
 
@@ -123,11 +134,19 @@ public class PlayerServiceImpl implements PlayerService {
         if(playerRepository.findAll().isEmpty()){
             throw new HttpException(HttpStatus.INSUFFICIENT_STORAGE,"There is no registered player");
         }
-        Comparator<Player> comparator = Comparator.comparing(Player::calculateRate);
+        Comparator<Player> comparator = Comparator.comparing(Player::getRate);
         Player playerMax = getAllPlayers().stream().max(comparator).get();
         listPlayersMax = playerRepository.findAll().stream().
-                filter(player -> Objects.equals(player.calculateRate(), playerMax.calculateRate())).collect(Collectors.toList());
+                filter(player -> Objects.equals(player.getRate(), playerMax.getRate())).collect(Collectors.toList());
         return listPlayersMax;
+    }
+    @Override
+    public String login(Player player) {
+        Player player1 = playerRepository.getPlayerByName(player.getName());
+        if(player1==null||!passwordEncoder.matches(player.getPassword(), player1.getPassword())){
+            throw new HttpException(HttpStatus.UNAUTHORIZED,"Login or password is not valid");
+        }
+        return jwtService.generateToken(player1);
     }
 
 }

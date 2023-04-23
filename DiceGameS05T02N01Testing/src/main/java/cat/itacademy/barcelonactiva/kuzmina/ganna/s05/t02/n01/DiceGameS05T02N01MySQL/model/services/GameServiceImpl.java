@@ -8,9 +8,8 @@ import lombok.AllArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
-
+import java.util.Objects;
 
 @Service
 @AllArgsConstructor
@@ -20,9 +19,9 @@ public class GameServiceImpl implements GameService{
     private final PlayerService playerService;
     private  final PlayGameServiceImpl playGameService;
     @Override
-    public Game playGame(String playerId) {
+    public Game playGame(Integer playerId) {
         if(playerService.getAllPlayers().isEmpty()){
-            throw new HttpException(HttpStatus.INSUFFICIENT_STORAGE,"There is no registered player");
+            throw new HttpException(HttpStatus.INSUFFICIENT_STORAGE,"There is no one");
         }
         Player player = playerService.findPlayerById(playerId);
         if(player==null){
@@ -31,39 +30,35 @@ public class GameServiceImpl implements GameService{
 
         Game gamePlayed = playGameService.play();
         gamePlayed.setPlayer(player);
-        //player.calculateRate();
-        //gameRepository.save(gamePlayed);
-        if(player.getGames()==null){
-            player.setGames(new ArrayList<>());
-        }
-        Game savedGame = gameRepository.save(gamePlayed);
-        player.getGames().add(savedGame);
-        playerService.savePlayer(player);
-        return savedGame;
+
+        return gameRepository.save(gamePlayed);
     }
 
 
     @Override
-    public List<Game> getAllGamesWithPlayerId(String playerId){
-        if(playerService.getAllPlayers().isEmpty()){
-            throw new HttpException(HttpStatus.INSUFFICIENT_STORAGE,"There is no registered player");
-        }
-        //List<Game> allGames = gameRepository.findAll().stream()
-        //        .filter(game -> game.getPlayer().getPlayerId().equals(playerId)).toList();
-Player player = Player.builder().playerId(playerId).build();
-        return gameRepository.getGamesByPlayer(player);
-    }
-
-    @Override
-    public void deleteAllGames(String playerId){
+    public List<Game> getAllGamesWithPlayerId(Integer playerId){
         if(playerService.getAllPlayers().isEmpty()){
             throw new HttpException(HttpStatus.INSUFFICIENT_STORAGE,"There is no one");
         }
+        return gameRepository.getAllByPlayer(Player.builder().playerId(playerId).build());// gameRepository.findAll().stream().filter(game -> Objects.equals(game.getPlayer().getPlayerId(), playerId)).toList();
+
+      //  return allGames;
+    }
+
+    @Override
+    public boolean deleteAllGames(Integer playerId){
+       /* if(playerService.getAllPlayers().isEmpty()){
+            throw new HttpException(HttpStatus.INSUFFICIENT_STORAGE,"There is no one");
+        }*/
         List<Game> allGames = getAllGamesWithPlayerId(playerId);
-        for(Game game:allGames) {
-            gameRepository.deleteById(game.getGameId());
+        if(allGames.isEmpty()){
+            throw new HttpException(HttpStatus.INSUFFICIENT_STORAGE,"There is no one game");
         }
 
+        for(int i=0;i<allGames.size();i++){
+            gameRepository.deleteById(allGames.get(i).getGameId());
+        }
+        return true;
     }
 
 
